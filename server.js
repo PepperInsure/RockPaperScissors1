@@ -1,3 +1,5 @@
+
+
 var express = require('express');
 var http = require('http');
 var path = require('path');
@@ -33,33 +35,233 @@ router.use(express.static(path.resolve(__dirname, 'public')));
   they first connect.  The callback function is then fired and passed
   a handler for the socket they share.
 */
+var namespace = "/";
+
+var messages = [];
+//array holding all the sockets
+var sockets = [];
+var outstandingChallenges = [];
+var challengeRooms = [];
+var challengeRoomNames = [];
+var serverName = "Server: ";
+var userChallenged = "";
+var challenges = makeStruct("challenger challengee");
+var challengeChangeType = 0; //0 is reject, 1 is accept
+var successfulUpdate = -1; //if -1, it failed. If not -1, its the room number
 
 io.on('connection', function (socket) {
-  //socket.emit will send a message to the client, the data can be
-  // whatever you would like.
-  socket.emit('welcome', { hello: 'world' });
-  //this socket should also listen for the "ping server" event.
-  //my event names (other than connection) are made up.
-  socket.on('ping server', function (data) {
-    var now = new Date();
-    //I wasn't sure if "pong server" was a good name for the 
-    //response event but I'm sending down the date on the server
-    socket.emit('pong server', {date : now.toDateString()});
-  });
-
-  //this is proof of concept code, it will run once every 5 seconds 
-  // (for each client).  It sends the server's time down.
-  var serverMessage = function(){
-    var now = new Date();
-    socket.emit("server time", {time : now.toTimeString()});
+    messages.forEach(function (data) {
+      socket.emit('message', data);
+    });
+    sockets.push(socket);
     
-    setTimeout(serverMessage, 5000);
-  };
-  
-  //this starts the forever loop
-  serverMessage();
+    var serverMessage = function(){
+      broadcast('message', 'This is a command, not a user message');
+    
+    };
 
-});
+    socket.on('disconnect', function () {
+      sockets.splice(sockets.indexOf(socket), 1);
+      updateRoster();
+    });
+
+    socket.on('message', function (msg) {
+      var text = String(msg || '');
+      
+      if (!text)
+      return;
+      //# is a command, so we make sure it's just a regular message
+      if(!/#/.test(text)){
+        socket.get('name', function (err, name) {
+        var data = {
+          name: name,
+          text: text
+        };
+        broadcast('message', data);
+        messages.push(data);
+      });
+      
+      }
+      else{
+        socket.get('name', function (err, name) {
+          if(/#challenge/.test(text))
+          {
+            userChallenged = text.split(" ");
+            //We don't need the #challenge, just the name put in. Spaces will be removed.
+            var data = {
+              name: serverName,
+              text: name + " challenges " + userChallenged[1] + " to the field of honor!"
+            };
+            broadcast('message', data);
+            messages.push(data);
+            outstandingChallenges.push(new challenges(name, userChallenged[1]));
+            
+            
+            updateChallenges();
+            
+            //Tell socket to join a room, name is the challenger, userChallenged[1] is challengee
+            //challengeRooms.push(name + " " + userChallenged[1]);
+            //socket.join(name + " " + userChallenged[1]);
+            challengeRooms.push(socket.join(name + " " + userChallenged[1]));
+            challengeRoomNames.push(name + " " + userChallenged[1]);
+            //Hardcoded for checking values, remove/comment out later
+            /*
+            var data = {
+              name: serverName,
+              text: "joining room " + challengeRoomNames[0]
+            };
+            socket.to(challengeRoomNames[0]).emit('message', data);
+            */
+          }
+          //if name is in challenge list, takes first outstanding challenge
+          //person giving the challenge must be in the list
+          else if(/#accept/.test(text))
+          {
+            //notification would be here, but we need more info
+            
+            challengeChangeType = 1;
+            var success = alterChallenge(name, socket);
+            updateChallenges();
+            
+            //io.sockets.clients(challengeRoomNames[0]);
+            if(success != -1)
+            {
+              var data = {
+                name: serverName,
+                text: "joining room " + challengeRoomNames[success]
+              };
+              
+              io.sockets.in(challengeRooms[success]).emit('message', data);
+              //should be the exact same statement as name + " " + userChallenged[1] in challengeRoomNames
+              //socket.to(challengeRoomNames[0]).emit('message', data);
+              //handle the fighting, then splice both room and room name
+              
+              //io.sockets.in(challengeRooms[success]).emit('fighting');
+            }
+          }
+          else if(/#reject/.test(text))
+          {
+            var data = {
+              name: serverName,
+              text: name + " cowers away from the challenge..."
+            };
+            broadcast('message', data);
+            messages.push(data);
+            
+            challengeChangeType = 0;
+            var success = alterChallenge(name, socket);
+            updateChallenges();
+            
+            
+          }
+          else
+          {
+            var data = {
+            name: serverName,
+            text: "Invalid command."
+          };
+          broadcast('message', data);
+          messages.push(data);
+          }
+        });
+      };
+
+
+    });
+
+    socket.on('identify', function (name) {
+      socket.set('name', String(name || 'Anonymous'), function (err) {
+        updateRoster();
+      });
+    });
+  });
+//Look for the first instance of a challenge with their name on challengee, remove it. Uses splice.
+function alterChallenge(challenged, socket)
+{
+  var found = 0;
+  for (var i = 0; i < outstandingChallenges.length; i++) 
+  {
+    
+    if (outstandingChallenges[i].challengee == challenged)
+    {
+      //we still want to remove the challenge even if it's an accept
+      //send out the challenges
+      if (challengeChangeType == 1)
+      {
+        var data = {
+          name: serverName,
+          text: outstandingChallenges[i].challengee + " accepts the challenge from " + outstandingChallenges[i].challenger + "! Prepare to fight!"
+        };
+        broadcast('message', data);
+        messages.push(data);
+        
+        socket.join(challengeRooms[i]);
+        //broadcast that the two are now fighting
+        
+
+      }
+      //remove the challenge from the list
+      outstandingChallenges.splice(i, 1);
+      //may remove from the list here, or not
+      if(challengeChangeType == 0)
+      {
+        challengeRooms.splice(i, 1);
+        challengeRoomNames.splice(i, 1);
+      }
+      
+      found = 1;
+      updateChallenges();
+      return successfulUpdate = i;
+      //break;
+    }
+  }
+  //This line only runs if no challenges meeting our criteria are found
+  if(found == 0)
+  {
+    var data = {
+              name: serverName,
+              text: "But there was no challenge! Maybe someone should send one!"
+    };
+    broadcast('message', data);
+    messages.push(data);
+  }
+  return successfulUpdate = -1;
+}
+
+//This makes structs of as many arguments as you want, reuse it forever
+function makeStruct(names) {
+  var names = names.split(' ');
+  var count = names.length;
+  function constructor() {
+    for (var i = 0; i < count; i++) {
+      this[names[i]] = arguments[i];
+    }
+  }
+  return constructor;
+}
+
+function updateChallenges() {
+    broadcast('challenges', outstandingChallenges);
+
+}
+
+function updateRoster() {
+  async.map(
+    sockets,
+    function (socket, callback) {
+      socket.get('name', callback);
+    },
+    function (err, names) {
+      broadcast('roster', names);
+    }
+  );
+}
+
+function broadcast(event, data) {
+  sockets.forEach(function (socket) {
+    socket.emit(event, data);
+  });
+}
 
 //this is where we actually turn to the outside world.  You'll need 
 //to adjust if you are on some other server.

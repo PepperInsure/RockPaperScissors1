@@ -1,28 +1,19 @@
-# socketio-hello-world
+Uses node.js, mostly socket.io.
 
-This sets up a simple node server which emits and responds to events from a client connection.
+First attempt at a rock paper scissors game, nearly had it.
 
-## Node js
+Stopped working right around the part where I had to broadcast to rooms.
+There was no particular reason I could find that none of the methods used to tell everyone in a room failed.
+However, a tragedy occurred. This code is somewhat "spaghetti" and is somewhat unsuitable.
 
-Node is a stand-in for apache on the server.  You write a "server" script and run it, while it is running it will handle HTTP requests.  Node also comes with the wonderful node package manager *npm*.  To install the required libraries for a typical node application open your shell and run:
+Things to consider next time I try to do this:
+    Figure out how much to reuse, because it isn't all bad and it doesn't need to be thrown away.
 
-    npm install
-
-This will install a few things (express, socketio, async).  Normally you run the server and after a while your script will probably shut down.  You can use *forever* a nice node module for keeping the server up.  Otherwise
-
-    node server.js
-
-# HTTP ports
-
-This is your first time needing to think about ports.  Normal HTTP traffic is done on port 80, SSH on port 22, e-mail has a few ports roped off, DNS gets 53.
-
-Custom apps usually need to run on high port numbers (1025 to 65536) and mask them.  If you are on Cloud9 then your port number is 
-held in the variable 
-
-    process.env.PORT
-
-If you are on your own server then you might have some work to do or your urls might need :9839 after the top level domain (or whatever port you are using).
-
-There are other websockets libraries through other servers, but socketio is a good excuse to start picking up node.
-
-Just like before you'll need to spend some time just getting configured.  Once you are then start playing with the real app.
+    Consolidate ways of handling what I need to handle, 
+        because there are too many of them that basically do the same thing.
+    
+    Clearer separation of challenges and server messages
+    
+    Have 3 columns, or even tabs
+    
+    Better way to handle challenges and names, something along those lines

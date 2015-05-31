@@ -1,10 +1,10 @@
 {
   "name": "socketio-example",
   "version": "0.0.1",
-  "description": "Example code to demonstrate `socket.io` with a static `express` server",
+  "description": "Basic rock paper scissors game with sockets",
   "main": "server.js",
   "repository": "",
-  "author": "Andy Novocin",
+  "author": "Jacob Trieu",
   "dependencies": {
     "async": "~0.2.8",
     "express": "~3.2.4",
